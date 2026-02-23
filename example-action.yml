@@ -1,0 +1,108 @@
+# 사용 예시: 이 파일을 사용하는 쪽 프로젝트의 .github/workflows/ 에 배치합니다.
+#
+# 필요한 프로퍼티 파일:
+#   - ci-ghcr.properties  (Docker/GHCR 빌드 설정)
+#   - ci-mvn.properties   (Gradle Maven publish 설정, env=gradle)
+#   - ci-npm.properties   (Node.js npm publish 설정, env=node)
+#
+# 필요한 Secrets:
+#   - GITHUB_TOKEN  (자동 제공)
+#   - PAT           (optional, 없으면 GITHUB_TOKEN 사용)
+#   - GPG_TOKEN     (signed-tag 트리거 시 GPG repo 접근용)
+
+name: CI
+
+on:
+  push:
+    branches: [master, develop]
+    tags: ["*"]
+
+env:
+  CI_VERSION: "v0.1.0"  # cho-hm/ci 릴리즈 버전
+  CI_ENV: "gradle"       # "gradle" 또는 "node"
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      # ──────────────────────────────────────────
+      # Pre-steps
+      # ──────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      # Gradle 환경일 때
+      - name: Setup Java
+        if: env.CI_ENV == 'gradle'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      # Node 환경일 때
+      - name: Setup Node
+        if: env.CI_ENV == 'node'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: https://npm.pkg.github.com
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ──────────────────────────────────────────
+      # CI 바이너리 다운로드
+      # ──────────────────────────────────────────
+      - name: Download CI binary
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          case "${{ runner.os }}" in
+            Linux)   GOOS="linux" ;;
+            macOS)   GOOS="darwin" ;;
+            Windows) GOOS="windows" ;;
+            *) echo "Unsupported OS: ${{ runner.os }}"; exit 1 ;;
+          esac
+          case "${{ runner.arch }}" in
+            X64)   GOARCH="amd64" ;;
+            ARM64) GOARCH="arm64" ;;
+            *) echo "Unsupported ARCH: ${{ runner.arch }}"; exit 1 ;;
+          esac
+
+          NAME="ci_${GOOS}_${GOARCH}"
+          EXT=""; if [ "$GOOS" = "windows" ]; then EXT=".exe"; fi
+
+          URL_PREFIX="https://github.com/cho-hm/ci/releases/download/${{ env.CI_VERSION }}"
+          OUT_DIR="${{ runner.temp }}/${NAME}"
+          mkdir -p "$OUT_DIR"
+
+          BIN_PATH="$OUT_DIR/${NAME}${EXT}"
+          CHECKSUM_PATH="$OUT_DIR/${NAME}${EXT}.sha256"
+
+          curl -fL --retry 3 --retry-delay 2 -o "$BIN_PATH" "${URL_PREFIX}/${NAME}${EXT}"
+          curl -fL --retry 3 --retry-delay 2 -o "$CHECKSUM_PATH" "${URL_PREFIX}/${NAME}${EXT}.sha256"
+
+          (cd "$OUT_DIR" && sha256sum -c "${NAME}${EXT}.sha256")
+
+          if [ "$GOOS" != "windows" ]; then chmod +x "$BIN_PATH"; fi
+          echo "CI_PATH=$BIN_PATH" >> "$GITHUB_ENV"
+
+      # ──────────────────────────────────────────
+      # CI 실행
+      # ──────────────────────────────────────────
+      - name: Run CI
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PAT: ${{ secrets.PAT }}
+          GPG_TOKEN: ${{ secrets.GPG_TOKEN }}
+        run: |
+          "$CI_PATH" -env "${{ env.CI_ENV }}" -parse -check -publish -build

@@ -1,0 +1,15 @@
+# Build output
+ci_linux_*
+ci_darwin_*
+ci_windows_*
+*.exe
+/ci
+
+# Test projects (separate repos)
+testproject-*/
+
+# IDE / Tools
+.idea/
+.serena/
+.DS_Store
+CLAUDE.md
