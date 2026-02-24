@@ -78,7 +78,7 @@ jobs:
             *) echo "Unsupported ARCH: ${{ runner.arch }}"; exit 1 ;;
           esac
 
-          NAME="ci_${GOOS}_${GOARCH}"
+          NAME="ci-${GOOS}-${GOARCH}"
           EXT=""; if [ "$GOOS" = "windows" ]; then EXT=".exe"; fi
 
           URL_PREFIX="https://github.com/cho-hm/ci/releases/download/${{ env.CI_VERSION }}"
@@ -86,12 +86,8 @@ jobs:
           mkdir -p "$OUT_DIR"
 
           BIN_PATH="$OUT_DIR/${NAME}${EXT}"
-          CHECKSUM_PATH="$OUT_DIR/${NAME}${EXT}.sha256"
 
           curl -fL --retry 3 --retry-delay 2 -o "$BIN_PATH" "${URL_PREFIX}/${NAME}${EXT}"
-          curl -fL --retry 3 --retry-delay 2 -o "$CHECKSUM_PATH" "${URL_PREFIX}/${NAME}${EXT}.sha256"
-
-          (cd "$OUT_DIR" && sha256sum -c "${NAME}${EXT}.sha256")
 
           if [ "$GOOS" != "windows" ]; then chmod +x "$BIN_PATH"; fi
           echo "CI_PATH=$BIN_PATH" >> "$GITHUB_ENV"

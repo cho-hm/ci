@@ -76,6 +76,46 @@ Workflow의 `env`로 전달해야 하는 변수:
 
 `GITHUB_WORKSPACE`, `GITHUB_REF_TYPE`, `GITHUB_REF_NAME`, `GITHUB_SHA`, `GITHUB_REPOSITORY`, `GITHUB_ACTOR` 등은 GitHub Actions가 자동 제공하므로 별도 설정 불필요.
 
+### 토큰 발급 및 권한 설정
+
+#### GITHUB_TOKEN
+
+workflow에서 자동 제공되는 토큰. `permissions`로 필요 권한을 선언한다.
+
+```yaml
+permissions:
+  contents: read      # 코드 checkout
+  packages: write     # GHCR push, GPR publish
+```
+
+별도 발급 불필요. workflow 파일에 위 permissions를 명시하면 된다.
+
+#### PAT (Personal Access Token)
+
+GHCR 로그인에 사용. 없으면 `GITHUB_TOKEN`으로 대체된다. 별도 발급이 필요한 경우:
+
+1. GitHub → Settings → Developer settings → **Personal access tokens** → **Fine-grained tokens** → Generate new token
+2. 필요 권한:
+   - **Repository access**: 대상 리포지토리 선택
+   - **Permissions**:
+     - `Read access to metadata`
+     - `Read and Write access to packages` (GHCR push)
+3. 생성된 토큰을 대상 리포지토리의 Settings → Secrets and variables → Actions → **New repository secret**에 `PAT`로 등록
+
+#### GPG_TOKEN
+
+`signed-tag` 트리거 시 GPG 키가 저장된 private repo를 clone하기 위한 토큰.
+
+1. GitHub → Settings → Developer settings → **Personal access tokens** → **Fine-grained tokens** → Generate new token
+2. 필요 권한:
+   - **Repository access**: GPG 키 저장 리포지토리 선택
+   - **Permissions**:
+     - `Read access to metadata`
+     - `Read access to contents` (repo clone)
+3. 생성된 토큰을 대상 리포지토리의 Settings → Secrets and variables → Actions → **New repository secret**에 `GPG_TOKEN`으로 등록
+
+> `trigger.type`이 `signed-tag`가 아니면 `GPG_TOKEN`은 불필요하다.
+
 ### Workflow 예시
 
 [example-action.yml](./example-action.yml) 참조. 사용하는 쪽 프로젝트의 `.github/workflows/`에 배치한다.
@@ -130,7 +170,21 @@ dependencies {
 npm install @OWNER/PACKAGE
 ```
 
-`OWNER/REPO`는 GitHub repository 경로. `GITHUB_TOKEN`은 `read:packages` 권한 필요.
+`OWNER/REPO`는 GitHub repository 경로.
+
+### GPR 패키지 접근 토큰
+
+GPR은 public 리포지토리라도 패키지 읽기에 인증이 필요하다. 소비하는 쪽에서 토큰을 발급받아야 한다.
+
+1. GitHub → Settings → Developer settings → **Personal access tokens** → **Fine-grained tokens** → Generate new token
+2. 필요 권한:
+   - **Repository access**: 패키지가 배포된 리포지토리 선택
+   - **Permissions**:
+     - `Read access to metadata`
+     - `Read access to packages`
+3. 발급된 토큰을 환경변수로 설정:
+   - **Maven (Gradle)**: `GPR_USER`(GitHub 사용자명), `GPR_TOKEN`(발급 토큰)
+   - **npm**: `GITHUB_TOKEN`(발급 토큰) — `.npmrc`에서 참조
 
 ### 주의: 패키지 버전 충돌
 
@@ -152,8 +206,8 @@ go vet ./...
 ### 크로스컴파일
 
 ```bash
-GOOS=linux  GOARCH=amd64 go build -o ci_linux_amd64 .
-GOOS=linux  GOARCH=arm64 go build -o ci_linux_arm64 .
-GOOS=darwin GOARCH=amd64 go build -o ci_darwin_amd64 .
-GOOS=darwin GOARCH=arm64 go build -o ci_darwin_arm64 .
+GOOS=linux  GOARCH=amd64 go build -o ci-linux-amd64 .
+GOOS=linux  GOARCH=arm64 go build -o ci-linux-arm64 .
+GOOS=darwin GOARCH=amd64 go build -o ci-darwin-amd64 .
+GOOS=darwin GOARCH=arm64 go build -o ci-darwin-arm64 .
 ```
