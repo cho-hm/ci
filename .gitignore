@@ -1,7 +1,8 @@
 # Build output
-ci_linux_*
-ci_darwin_*
-ci_windows_*
+ci-linux-*
+ci-darwin-*
+ci-windows-*
+*.sha256
 *.exe
 /ci
 
