@@ -20,7 +20,7 @@ GitHub Releases에서 크로스컴파일된 바이너리를 다운로드하여 w
 | `-publish` | parse + check + publish (GPR 패키지 배포) |
 | `-build` | parse + check + build (Docker 빌드 + GHCR push) |
 
-`-publish`와 `-build`는 동시 사용 가능합니다. 각각 독립 실행되며, 하나라도 실패하면 exit 1.
+> `-publish`와 `-build`는 동시 사용 가능합니다. (각각 독립 실행되며, 하나라도 실패하면 exit 1.)
 
 ### 프로퍼티 파일
 
@@ -34,35 +34,79 @@ GitHub Releases에서 크로스컴파일된 바이너리를 다운로드하여 w
 
 **ci-ghcr.properties** (Docker/GHCR 빌드)
 ```properties
+# 트리거 타입: signed-tag (GPG 서명 태그) | tag (일반 태그) | branch (브랜치 push)
+# 생략 시 기본값: signed-tag
 trigger.type=signed-tag
+
+# 트리거 대상 브랜치. ':'로 여러 브랜치 지정 가능
+# trigger.type=branch 일 때만 사용. 생략 시 기본값: master
 trigger.branch=master:develop
+
+# Dockerfile 경로
+# 생략 시 기본값: ./.github/Dockerfile
 docker.file.path=./.github/Dockerfile
-build.command=./gradlew clean test bootJar --no-daemon  # env=node이면 "npm ci && npm run build"
+
+# 빌드 명령어
+# 생략 시 기본값: gradle → "./gradlew clean test bootJar --no-daemon --refresh-dependencies -i"
+#               node → "npm ci && npm run build"
+build.command=./gradlew clean test bootJar --no-daemon
+
+# Docker 이미지 빌드 플랫폼
+# 생략 시 기본값: linux/amd64,linux/arm64
 image.platform=linux/amd64,linux/arm64
+
+# 이미지 태그 suffix 조합 (':'로 구분)
+# 사용 가능 값: trigger-type, tag, branch, sha, short-sha, latest
+# 생략 시 기본값: gradle → "trigger-type:tag:branch:sha:short-sha:latest"
+#               node → "trigger-type:tag:branch:short-sha:latest"
 image.name.suffix=trigger-type:tag:branch:sha:short-sha:latest
+
+# GPG 키 저장소 URL (signed-tag 트리거 시에만 필요)
+# 생략 시 기본값 없음
 gpg.repo.url=https://github.com/org/gpg-keys.git
+
+# GPG 키 저장소 내 GPG 키 경로
+# 생략 시 기본값 없음
 gpg.repo.gpg.path=keys/gpg
+
+# GPG 키 저장소 내 ASC 키 경로
+# 생략 시 기본값 없음
 gpg.repo.asc.path=keys/asc
+
+# GPG 키 저장소 브랜치
+# 생략 시 기본값 없음
 gpg.repo.branch=master
 ```
 
 **ci-mvn.properties** (Gradle Maven publish)
 ```properties
+# 트리거 타입: signed-tag | tag | branch
+# 생략 시 기본값: signed-tag
 trigger.type=signed-tag
+
+# 트리거 대상 브랜치. ':'로 여러 브랜치 지정 가능
+# trigger.type=branch 일 때만 사용. 생략 시 기본값: master
 trigger.branch=master
+
+# publish 명령어
+# 생략 시 기본값: "./gradlew clean test publish --no-daemon"
 publish.command=./gradlew clean test publish --no-daemon
 ```
 
 **ci-npm.properties** (Node.js npm publish)
 ```properties
+# 트리거 타입: signed-tag | tag | branch
+# 생략 시 기본값: signed-tag
 trigger.type=signed-tag
+
+# 트리거 대상 브랜치. ':'로 여러 브랜치 지정 가능
+# trigger.type=branch 일 때만 사용. 생략 시 기본값: master
 trigger.branch=master
+
+# publish 명령어
+# 생략 시 기본값: "npm publish --registry=https://npm.pkg.github.com"
 publish.command=npm publish --registry=https://npm.pkg.github.com
 ```
-
-구분자: `=`, 주석: `#` (따옴표 내부 `#`은 주석 아님), `trigger.branch`는 `:`로 여러 브랜치 지정 가능합니다.
-
-`trigger.type` 유효값: `signed-tag` (GPG 서명 태그), `tag` (일반 태그), `branch` (브랜치 push)
 
 ### Secrets
 
