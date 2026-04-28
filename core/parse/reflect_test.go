@@ -2,6 +2,8 @@ package parse
 
 import (
 	"bufio"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -124,5 +126,22 @@ func Test_resolveValueByTag(t *testing.T) {
 	}
 	if obj.Three != "has=equals" {
 		t.Errorf("Three = %q, want %q", obj.Three, "has=equals")
+	}
+}
+
+func Test_resolveValueByTag_missingFileReturnsErrNotExist(t *testing.T) {
+	type target struct {
+		One string `pkey:"key.one"`
+	}
+	obj := target{One: "default"}
+	missing := filepath.Join(t.TempDir(), "does-not-exist.properties")
+
+	err := resolveValueByTag(missing, &obj)
+
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("expected fs.ErrNotExist, got %v", err)
+	}
+	if obj.One != "default" {
+		t.Errorf("default should be preserved when file missing, got %q", obj.One)
 	}
 }
