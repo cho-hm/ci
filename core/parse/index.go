@@ -1,26 +1,36 @@
 package parse
 
 import (
+	"errors"
+	"io/fs"
 	"log"
 	"path/filepath"
 	"strings"
 )
 
 func Run() {
-	buildPropPath := buildPropertiesFilePath()
 	ctx := TaskContext
-	err := resolveValueByTag(buildPropPath, ctx.BuildContexts.Get())
-	if err != nil {
-		log.Panicf("can not set property from build file : %v", err)
+
+	if buildCtx := ctx.BuildContexts.Get(); buildCtx.IsApplicable {
+		loadProperties("build", buildPropertiesFilePath(), buildCtx)
 	}
 
-	pubPropPath := publishPropertiesFilePath()
-	err = resolveValueByTag(pubPropPath, ctx.PublishContexts.Get())
-	if err != nil {
-		log.Panicf("can not set property from publish file : %v", err)
+	if publishCtx := ctx.PublishContexts.Get(); publishCtx.IsApplicable {
+		loadProperties("publish", publishPropertiesFilePath(), publishCtx)
 	}
 
 	resolveImageNameSuffix()
+}
+
+func loadProperties(label, path string, target any) {
+	err := resolveValueByTag(path, target)
+	if errors.Is(err, fs.ErrNotExist) {
+		log.Printf("%s properties file not found, using defaults: %s", label, path)
+		return
+	}
+	if err != nil {
+		log.Panicf("can not set property from %s file : %v", label, err)
+	}
 }
 
 func resolveImageNameSuffix() {
