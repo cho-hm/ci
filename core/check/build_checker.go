@@ -29,6 +29,12 @@ func checkBuild() {
 		}
 	}
 
+	if ctx.GithubRefType == constant.TAG_VALUE || strings.HasPrefix(ctx.GithubRef, constant.TAG_REF_PREFIX) {
+		if !commonCheckTag(ctx, c) {
+			return
+		}
+	}
+
 	if ctx.GithubRefType == constant.BRANCH_VALUE {
 		if !commonCheckBranch(ctx, c) {
 			return

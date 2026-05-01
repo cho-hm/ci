@@ -3,6 +3,7 @@ package constant
 const (
 	TRIGGER_TYPE      = "signed-tag"
 	TRIGGER_BRANCH    = "master"
+	TRIGGER_TAG       = ""
 	GPG_REPO_GPG_PATH = "keys/gpg"
 	GPG_REPO_ASC_PATH = "keys/asc"
 	GPG_REPO_BRANCH   = "master"
