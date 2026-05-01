@@ -10,6 +10,7 @@ import (
 type checkable interface {
 	triggerType() string
 	triggerBranch() string
+	triggerTag() string
 	stateCh() chan int
 }
 
@@ -17,12 +18,14 @@ type buildCheckable struct{ ctx *parse.BuildContexts }
 
 func (b buildCheckable) triggerType() string   { return b.ctx.TriggerType }
 func (b buildCheckable) triggerBranch() string { return b.ctx.TriggerBranch }
+func (b buildCheckable) triggerTag() string    { return b.ctx.TriggerTag }
 func (b buildCheckable) stateCh() chan int     { return b.ctx.State.Get() }
 
 type publishCheckable struct{ ctx *parse.PublishContexts }
 
 func (p publishCheckable) triggerType() string   { return p.ctx.TriggerType }
 func (p publishCheckable) triggerBranch() string { return p.ctx.TriggerBranch }
+func (p publishCheckable) triggerTag() string    { return p.ctx.TriggerTag }
 func (p publishCheckable) stateCh() chan int     { return p.ctx.State.Get() }
 
 func commonCheckTriggerType(ctx *parse.TaskContexts, c checkable) bool {
@@ -54,6 +57,27 @@ func commonCheckBranch(ctx *parse.TaskContexts, c checkable) bool {
 		}
 	}
 	logExpectFail(c.triggerBranch(), branchName, "trigger branch")
+	c.stateCh() <- constant.SILENTLY
+	return false
+}
+
+func commonCheckTag(ctx *parse.TaskContexts, c checkable) bool {
+	expected := strings.TrimSpace(c.triggerTag())
+	if len(expected) == 0 {
+		return true
+	}
+	tagName := strings.TrimSpace(ctx.GithubRefName)
+	if len(tagName) == 0 {
+		logExpectFail(expected, tagName, "trigger tag")
+		c.stateCh() <- constant.SILENTLY
+		return false
+	}
+	for _, allowed := range strings.Split(expected, ":") {
+		if strings.TrimSpace(allowed) == tagName {
+			return true
+		}
+	}
+	logExpectFail(expected, tagName, "trigger tag")
 	c.stateCh() <- constant.SILENTLY
 	return false
 }

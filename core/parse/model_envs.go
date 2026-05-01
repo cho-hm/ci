@@ -57,6 +57,7 @@ type BuildContexts struct {
 	DockerFile         string `pkey:"docker.file.path"`
 	TriggerType        string `pkey:"trigger.type"`
 	TriggerBranch      string `pkey:"trigger.branch"`
+	TriggerTag         string `pkey:"trigger.tag"`
 	BuildCommand       string `pkey:"build.command"`
 	ImagePlatform      string `pkey:"image.platform"`
 	RawImageNameSuffix string `pkey:"image.name.suffix"`
@@ -74,6 +75,7 @@ func (t *BuildContexts) init() {
 	t.DockerFile = filepath.Join(TaskContext.Workspace, defaults.DockerFilePath)
 	t.TriggerType = constant.TRIGGER_TYPE
 	t.TriggerBranch = constant.TRIGGER_BRANCH
+	t.TriggerTag = constant.TRIGGER_TAG
 	t.BuildCommand = defaults.BuildCommand
 	t.ImagePlatform = defaults.ImagePlatform
 	t.RawImageNameSuffix = defaults.RawImageNameSuffix
@@ -85,6 +87,7 @@ type PublishContexts struct {
 	IsApplicable   bool
 	TriggerType    string `pkey:"trigger.type"`
 	TriggerBranch  string `pkey:"trigger.branch"`
+	TriggerTag     string `pkey:"trigger.tag"`
 	PublishCommand string `pkey:"publish.command"`
 	State          *StateChannelProvider
 }
@@ -94,6 +97,7 @@ func (t *PublishContexts) init() {
 	t.IsApplicable = TaskContext.TaskFlag.Publish()
 	t.TriggerType = constant.TRIGGER_TYPE
 	t.TriggerBranch = constant.TRIGGER_BRANCH
+	t.TriggerTag = constant.TRIGGER_TAG
 	t.PublishCommand = defaults.PublishCommand
 	t.State = &StateChannelProvider{}
 }

@@ -3,6 +3,7 @@ package check
 import (
 	"ci/core/constant"
 	"ci/core/parse"
+	"strings"
 )
 
 func checkPublish() {
@@ -18,6 +19,12 @@ func checkPublish() {
 	ok := commonCheckTriggerType(ctx, c)
 	if !ok {
 		return
+	}
+
+	if ctx.GithubRefType == constant.TAG_VALUE || strings.HasPrefix(ctx.GithubRef, constant.TAG_REF_PREFIX) {
+		if !commonCheckTag(ctx, c) {
+			return
+		}
 	}
 
 	if ctx.GithubRefType == constant.BRANCH_VALUE {
