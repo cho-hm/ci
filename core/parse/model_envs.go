@@ -121,14 +121,15 @@ type ImageNameSuffix struct {
 
 func (suffix ImageNameSuffix) ToSlice(refName string, triggerType string, sha string) []string {
 	ret := make([]string, 0, 6)
+	sanitizedRefName := sanitizeRefName(refName)
 	if suffix.TriggerType {
 		ret = append(ret, triggerType)
 	}
 	if suffix.Tag && strings.Contains(strings.ToLower(triggerType), constant.TAG_VALUE) {
-		ret = append(ret, refName)
+		ret = append(ret, sanitizedRefName)
 	}
 	if suffix.Branch {
-		ret = append(ret, refName)
+		ret = append(ret, sanitizedRefName)
 	}
 	if suffix.Sha || suffix.ShortSha {
 		if suffix.Sha {
@@ -149,4 +150,8 @@ func getSecret(key string) []byte {
 }
 func getEnv(key string) string {
 	return os.Getenv(key)
+}
+
+func sanitizeRefName(refName string) string {
+	return strings.ReplaceAll(refName, "/", "-")
 }
