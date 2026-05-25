@@ -325,13 +325,15 @@ publish.command=npm publish --registry=https://npm.pkg.github.com
 | 토큰 | 추가되는 값 | 조건 |
 |------|-------------|------|
 | `trigger-type` | `trigger.type` 값 그대로 (`signed-tag` / `tag` / `branch`) | 항상 |
-| `tag` | `GITHUB_REF_NAME` (예: `v1.0.0`) | trigger 가 tag 계열일 때만 |
-| `branch` | `GITHUB_REF_NAME` 그대로 | 항상 (이름 그대로 추가됨) |
+| `tag` | `GITHUB_REF_NAME` (예: `v1.0.0`) — `/` 는 `-` 로 치환 | trigger 가 tag 계열일 때만 |
+| `branch` | `GITHUB_REF_NAME` — `/` 는 `-` 로 치환 | 항상 |
 | `sha` | 전체 commit SHA (40자) | 항상 |
 | `short-sha` | commit SHA 앞 7자 | 항상 |
 | `latest` | 문자열 `"latest"` | 항상 |
 
 생성된 태그들은 **`docker buildx build --push -t ghcr.io/<repo>:<tag1> -t ghcr.io/<repo>:<tag2> ... <workspace>`** 로 한 번에 push 됩니다. (`<repo>` 는 소유자/이름이 모두 소문자 변환됩니다.)
+
+> Docker 이미지 태그는 `/` 를 허용하지 않으므로, 슬래시가 포함된 ref 이름(`dev/deploy`, `feature/x` 등)은 `tag` / `branch` 토큰 자리에서 자동으로 `-` 로 치환됩니다 (`dev/deploy` → `dev-deploy`). `trigger.tag` / `trigger.branch` **매칭 자체는 원본 ref 이름**으로 수행되므로 properties 의 값은 슬래시 그대로 적어도 됩니다.
 
 **예시 1 — signed-tag 트리거**
 
@@ -351,6 +353,16 @@ publish.command=npm publish --registry=https://npm.pkg.github.com
   - `ghcr.io/acme/widget:master`
   - `ghcr.io/acme/widget:def456a`
   - `ghcr.io/acme/widget:latest`
+
+**예시 3 — 슬래시 포함 태그 (sanitize 동작)**
+
+- 설정: `image.name.suffix=trigger-type:tag:short-sha`, `trigger.type=tag`, `trigger.tag=prod/deploy:stag/deploy:dev/deploy`
+- 워크플로우 발동: `git push --tags dev/deploy` (sha = `abc123def456...`)
+- 매칭: `trigger.tag` 비교는 원본 `dev/deploy` 로 수행되어 통과
+- 결과 태그 (`/` → `-` 치환 적용):
+  - `ghcr.io/acme/widget:tag`
+  - `ghcr.io/acme/widget:dev-deploy`
+  - `ghcr.io/acme/widget:abc123d`
 
 ---
 
