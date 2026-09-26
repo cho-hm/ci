@@ -23,6 +23,7 @@ type Sender interface {
 type Config struct {
 	WebhookURL  string
 	WebhookType string
+	Lang        string // 알림 문구 언어 (en | ko), 미지정 시 en
 }
 
 // New - 설정을 해석해 Sender 를 만든다. 설정이 없거나 잘못되었으면 아무것도 하지 않는 Sender 를 반환한다.
@@ -41,9 +42,14 @@ func New(cfg Config) Sender {
 		log.Printf("WARN notification disabled: %v", err)
 		return noopSender{}
 	}
+	lang, ok := textsOf(cfg.Lang)
+	if !ok {
+		log.Printf("WARN unsupported WEBHOOK_LANG %q, falling back to %s", cfg.Lang, defaultLang)
+	}
 	log.Printf("notification enabled: %s", notifier.Name())
 	return &webhookSender{
 		notifier: notifier,
+		texts:    lang,
 		endpoint: endpoint,
 		client:   &http.Client{Timeout: sendTimeout},
 	}
@@ -55,6 +61,7 @@ func (noopSender) Send(Event) {}
 
 type webhookSender struct {
 	notifier Notifier
+	texts    texts
 	endpoint *url.URL // 토큰이 포함된 비밀 값이므로 로그에 남기지 않는다.
 	client   *http.Client
 }
@@ -66,7 +73,7 @@ func (s *webhookSender) Send(e Event) {
 }
 
 func (s *webhookSender) send(e Event) error {
-	payload, err := s.notifier.Format(e, s.endpoint)
+	payload, err := s.notifier.Format(Message{Event: e, Card: NewCard(e, s.texts)}, s.endpoint)
 	if err != nil {
 		return err
 	}

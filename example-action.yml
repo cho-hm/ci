@@ -103,5 +103,6 @@ jobs:
           GPG_TOKEN: ${{ secrets.GPG_TOKEN }}
           WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
           # WEBHOOK_TYPE: slack  # optional — 생략 시 URL 로 자동 판별
+          # WEBHOOK_LANG: ko     # optional — en(기본) | ko
         run: |
           "$CI_PATH" -env "${{ env.CI_ENV }}" -parse -check -publish -build

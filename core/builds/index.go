@@ -11,5 +11,5 @@ func Run() constant.PhaseResult {
 	if err := e.MkBuildChain().DoChain(parse.TaskContext); err != nil {
 		return constant.PhaseResult{Phase: "build", Status: constant.PhaseFailure, Cause: err}
 	}
-	return constant.PhaseResult{Phase: "build", Status: constant.PhaseSuccess}
+	return constant.PhaseResult{Phase: "build", Status: constant.PhaseSuccess, Artifacts: parse.TaskContext.ImageRefs()}
 }

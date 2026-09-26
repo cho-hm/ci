@@ -10,6 +10,7 @@ import (
 	"ci/orch/arg"
 	"log"
 	"os"
+	"time"
 )
 
 // Run - orch.runner.Run()
@@ -18,12 +19,12 @@ func Run() {
 	log.Printf("=== Welcome ===\n\nStart Integration!")
 	var results []constant.PhaseResult
 	notification := newNotification()
-	notification.started()
 	defer notification.finishedOnPanic(&results)
 
 	var flag, tasks = arg.Flag(), arg.Task()
 	parse.TaskContext.EnvDefaults = env.Of(flag.EnvType()).Defaults()
 	parse.TaskContext.TaskFlag = flag
+	notification.started()
 	step := 1
 	if flag.Parse() {
 		printStartLog(&step, tasks, "parse properties")
@@ -47,7 +48,7 @@ func Run() {
 		}
 		switch state := <-ch; state {
 		case constant.CONTINUE:
-			results = append(results, publish.Run())
+			results = append(results, timed(publish.Run))
 		default:
 			results = append(results, constant.PhaseResult{Phase: "publish", Status: constant.PhaseSkipped, Reason: skipReason(state)})
 		}
@@ -63,7 +64,7 @@ func Run() {
 		}
 		switch state := <-ch; state {
 		case constant.CONTINUE:
-			results = append(results, build.Run())
+			results = append(results, timed(build.Run))
 		default:
 			results = append(results, constant.PhaseResult{Phase: "build", Status: constant.PhaseSkipped, Reason: skipReason(state)})
 		}
@@ -76,6 +77,14 @@ func Run() {
 		os.Exit(1)
 	}
 	log.Printf("%c: %d Tasks all done!", '\u2714', tasks)
+}
+
+// timed - phase 실행 소요 시간을 결과에 기록한다.
+func timed(run func() constant.PhaseResult) constant.PhaseResult {
+	startedAt := time.Now()
+	result := run()
+	result.Elapsed = time.Since(startedAt)
+	return result
 }
 
 func printStartLog(step *int, tasks int, message string) {
