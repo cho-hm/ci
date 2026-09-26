@@ -18,6 +18,7 @@ Gradle / Node.js 프로젝트의 **Docker 이미지 빌드(GHCR)** 와 **패키�
 - **세밀한 이미지 태깅** — `trigger-type`, `tag`, `branch`, `sha`, `short-sha`, `latest` 의 자유로운 조합.
 - **부분 실행** — `-publish` / `-build` 를 독립적으로 또는 함께 실행.
 - **선택적 설정** — 모든 `.properties` 키는 선택사항이며, 누락 시 안전한 기본값으로 폴백 + 경고 로그.
+- **웹후크 알림** — CI 시작 / 종료(성공·실패, phase 별 결과)를 Discord · Slack · Teams · Google Chat · Telegram 또는 범용 JSON 으로 전송.
 
 ---
 
@@ -36,6 +37,9 @@ Gradle / Node.js 프로젝트의 **Docker 이미지 빌드(GHCR)** 와 **패키�
   - [ci-npm.properties](#ci-npmproperties)
 - [환경 변수 & Secrets](#환경-변수--secrets)
 - [토큰 발급 가이드](#토큰-발급-가이드)
+- [웹후크 알림](#웹후크-알림)
+  - [지원 플랫폼](#지원-플랫폼)
+  - [JSON 페이로드](#json-페이로드)
 - [이미지 태그 합성 규칙](#이미지-태그-합성-규칙)
 - [기본값 일람](#기본값-일람)
 - [시나리오별 예시](#시나리오별-예시)
@@ -297,10 +301,12 @@ publish.command=npm publish --registry=https://npm.pkg.github.com
 | `GITHUB_TOKEN` | ✅ | `${{ secrets.GITHUB_TOKEN }}` — GitHub Actions 가 자동 발급 |
 | `PAT` | ◻️ | Personal Access Token. GHCR 로그인용. 미설정 시 `GITHUB_TOKEN` 으로 폴백 |
 | `GPG_TOKEN` | ◻️ | `signed-tag` 트리거 시 GPG 키 저장 리포 clone 용 인증 토큰 |
+| `WEBHOOK_URL` | ◻️ | 알림을 보낼 웹후크 URL. **Secret 으로 등록**. 미설정 시 알림 기능 비활성화. [웹후크 알림](#웹후크-알림) 참고 |
+| `WEBHOOK_TYPE` | ◻️ | 알림 형식 (`discord`, `slack`, `teams`, `googlechat`, `telegram`, `json`). 미설정 시 URL 로 자동 판별 |
 
 다음 변수들은 GitHub Actions runner 가 자동 주입하므로 별도 설정이 필요 없습니다.
 
-`GITHUB_WORKSPACE`, `GITHUB_REPOSITORY`, `GITHUB_REF_TYPE`, `GITHUB_REF`, `GITHUB_REF_NAME`, `GITHUB_SHA`, `GITHUB_ACTOR`
+`GITHUB_WORKSPACE`, `GITHUB_REPOSITORY`, `GITHUB_REF_TYPE`, `GITHUB_REF`, `GITHUB_REF_NAME`, `GITHUB_SHA`, `GITHUB_ACTOR`, `GITHUB_SERVER_URL`, `GITHUB_RUN_ID`, `GITHUB_WORKFLOW`
 
 ---
 
@@ -315,6 +321,77 @@ publish.command=npm publish --registry=https://npm.pkg.github.com
 | **GPR 소비자 토큰** | 배포된 패키지를 사용하는 측 (별도 등록) | 패키지 배포 리포지토리 | `metadata: read`, `packages: read` |
 
 > `GITHUB_TOKEN` 은 workflow 가 자동 발급하므로 별도 작업이 필요 없습니다 — 워크플로우의 `permissions` 만 선언하면 됩니다.
+
+---
+
+## 웹후크 알림
+
+CI 가 **시작될 때** 와 **종료될 때** 설정한 웹후크로 알림을 보냅니다. 종료 알림에는 성공/실패 여부, 소요 시간, phase 별 결과(`[publish] succeeded`, `[build] FAILED: ...`) 와 Actions 실행 링크가 포함됩니다.
+
+```yaml
+      - name: Run CI
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WEBHOOK_URL:  ${{ secrets.WEBHOOK_URL }}   # 웹후크 URL 은 반드시 Secret 으로
+          # WEBHOOK_TYPE: slack                      # 선택 — 생략 시 URL 로 자동 판별
+```
+
+| 상황 | 동작 |
+|------|------|
+| `WEBHOOK_URL` 미설정 | 알림 비활성화 (`notification disabled` 안내 로그) |
+| `WEBHOOK_TYPE` 미설정 | URL 호스트로 플랫폼 자동 판별, 판별 불가 시 `json` |
+| 지원하지 않는 `WEBHOOK_TYPE` / 잘못된 URL | 알림만 비활성화 + 경고 로그 |
+| 전송 실패 (네트워크 오류, 4xx/5xx) | 경고 로그만 남김 |
+
+- 알림은 **CI 결과(exit code)에 어떠한 영향도 주지 않습니다.** 전송 타임아웃은 10초입니다.
+- 결과 판정은 exit code 와 동일합니다 — phase 중 하나라도 실패하거나 panic 이 발생하면 실패, `SKIPPED` 는 실패가 아닙니다.
+- 로그에는 웹후크 URL 이 출력되지 않습니다.
+- ⚠️ 바이너리 실행 **이전** 단계(checkout, 바이너리 다운로드 등)의 실패는 알림 대상이 아닙니다.
+
+### 지원 플랫폼
+
+| `WEBHOOK_TYPE` | 자동 판별 호스트 | 형식 | 비고 |
+|----------------|------------------|------|------|
+| `discord` | `discord.com/api/webhooks/...` | Embed | 채널 설정 → 연동 → 웹후크 |
+| `slack` | `hooks.slack.com` | Attachment | Slack 호환인 **Mattermost, Rocket.Chat** 은 `WEBHOOK_TYPE=slack` 을 명시 |
+| `teams` | `*.logic.azure.com`, `*.powerplatform.com`, `*.webhook.office.com` | Adaptive Card | Workflows(Power Automate) 웹후크 권장 |
+| `googlechat` | `chat.googleapis.com` | Text | 스페이스 → 앱 및 통합 → 웹후크 |
+| `telegram` | `api.telegram.org` | Text | URL 형태: `https://api.telegram.org/bot<TOKEN>/sendMessage?chat_id=<CHAT_ID>` (`chat_id` 필수) |
+| `json` | (폴백) | 범용 JSON | 전용 형식이 없는 수신측(사내 봇, n8n, Zapier 등)용 |
+
+새 플랫폼은 `core/notify/` 에 `Notifier` 구현체 파일 하나를 추가하고 `init()` 에서 `Register` 하면 됩니다.
+
+### JSON 페이로드
+
+`json` 형식은 외부 계약이며, 호환되지 않는 변경 시 `version` 이 증가합니다.
+
+```json
+{
+  "version": 1,
+  "event": "finished",
+  "status": "failure",
+  "title": "❌ CI failed — owner/repo (CI)",
+  "workflow": "CI",
+  "repository": "owner/repo",
+  "ref": "master",
+  "sha": "0123456789abcdef0123456789abcdef01234567",
+  "actor": "someone",
+  "runUrl": "https://github.com/owner/repo/actions/runs/1",
+  "elapsedSeconds": 95,
+  "phases": [
+    { "phase": "publish", "status": "success" },
+    { "phase": "build", "status": "failure", "detail": "exit status 1" }
+  ],
+  "timestamp": "2026-01-01T00:00:00Z"
+}
+```
+
+| 필드 | 값 |
+|------|----|
+| `event` | `started` \| `finished` |
+| `status` | `running` \| `success` \| `failure` |
+| `phases[].status` | `success` \| `failure` \| `skipped` |
+| `error` | panic 등 phase 결과로 표현되지 않는 비정상 종료 사유 (없으면 생략) |
 
 ---
 
@@ -539,6 +616,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PAT:          ${{ secrets.PAT }}
           GPG_TOKEN:    ${{ secrets.GPG_TOKEN }}
+          WEBHOOK_URL:  ${{ secrets.WEBHOOK_URL }}  # optional — CI 시작/종료 알림
         run: |
           "$CI_PATH" -env "${{ env.CI_ENV }}" -parse -check -publish -build
 ```
@@ -625,6 +703,8 @@ GitHub Packages 는 동일 버전 패키지의 덮어쓰기를 제한합니다. 
 | `docker login` 실패 | `PAT` 권한 부족 — `packages: read & write` 가 있는지 확인. `PAT` 미등록 시 `GITHUB_TOKEN` 으로 시도하지만, 워크플로우의 `permissions: packages: write` 선언이 누락되었을 수 있음. |
 | `409 Conflict` (publish) | 동일 버전 재배포. 버전을 올리거나 SNAPSHOT 사용. |
 | `properties file not found, using defaults` | 정상 동작 — 해당 phase 가 적용되지만 properties 파일이 없는 경우의 안내 로그. 의도된 것이라면 무시해도 됩니다. |
+| `notification disabled: WEBHOOK_URL is not set` | 정상 동작 — 알림을 설정하지 않은 경우의 안내 로그. |
+| `WARN ... notification (...) failed` | 웹후크 전송 실패. URL/Secret 값, `WEBHOOK_TYPE` 이 플랫폼과 맞는지, Telegram 이면 `chat_id` 가 있는지 확인. CI 결과에는 영향 없음. |
 | `Need some options, but nothing` panic | 실행 플래그가 하나도 없음. `-parse`/`-check`/`-publish`/`-build` 중 하나 이상 지정. |
 
 ---
@@ -669,6 +749,7 @@ GitHub Releases 에 업로드하면 [전체 워크플로우 예시](#전체-워�
 │   ├── check/                 # 트리거 검증 + GPG 서명 검증
 │   ├── builds/                # Docker 빌드 체인 (build → login → buildx → logout)
 │   ├── publish/               # Maven/npm publish
+│   ├── notify/                # 웹후크 알림 (플랫폼별 Notifier + Sender)
 │   ├── env/                   # gradle/node 환경별 기본값/체인
 │   └── constant/              # 전역 상수, phase 결과 모델
 └── util/
