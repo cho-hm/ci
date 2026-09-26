@@ -9,6 +9,7 @@
 #   - GITHUB_TOKEN  (자동 제공)
 #   - PAT           (optional, 없으면 GITHUB_TOKEN 사용)
 #   - GPG_TOKEN     (signed-tag 트리거 시 GPG repo 접근용)
+#   - WEBHOOK_URL   (optional, CI 시작/종료 알림. discord/slack/teams/googlechat/telegram 자동 판별)
 
 name: CI
 
@@ -100,5 +101,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PAT: ${{ secrets.PAT }}
           GPG_TOKEN: ${{ secrets.GPG_TOKEN }}
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+          # WEBHOOK_TYPE: slack  # optional — 생략 시 URL 로 자동 판별
         run: |
           "$CI_PATH" -env "${{ env.CI_ENV }}" -parse -check -publish -build

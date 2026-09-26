@@ -16,6 +16,11 @@ import (
 // Orchestration tasks.
 func Run() {
 	log.Printf("=== Welcome ===\n\nStart Integration!")
+	var results []constant.PhaseResult
+	notification := newNotification()
+	notification.started()
+	defer notification.finishedOnPanic(&results)
+
 	var flag, tasks = arg.Flag(), arg.Task()
 	parse.TaskContext.EnvDefaults = env.Of(flag.EnvType()).Defaults()
 	parse.TaskContext.TaskFlag = flag
@@ -32,8 +37,6 @@ func Run() {
 		printStartLog(&step, tasks, "check commit")
 		check.Run()
 	}
-
-	var results []constant.PhaseResult
 
 	if flag.Publish() {
 		pctx := context.PublishContexts.Get()
@@ -68,6 +71,7 @@ func Run() {
 	}
 
 	reportResults(results)
+	notification.finished(results)
 	if hasFailed(results) {
 		os.Exit(1)
 	}
