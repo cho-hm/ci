@@ -2,10 +2,10 @@
 title: CI 시작/종료 웹후크 알림 (core/notify)
 date: 2026-09-26
 issue: -
-pr: -
+pr: https://github.com/cho-hm/ci/pull/8
 branch: feat/webhook-notify
 repo: ci
-status: open
+status: merged
 tags: [notify, webhook, discord, slack, teams, googlechat, telegram, json, runner, secret]
 ---
 
@@ -45,5 +45,5 @@ tags: [notify, webhook, discord, slack, teams, googlechat, telegram, json, runne
 - 실제 플랫폼(Discord 등) 대상 수동 검증은 미실시(로컬 수신 서버로 json 형식만 E2E 확인).
 
 ## 링크
-- 관련 위키: -
-- 설계 문서/이슈/PR: -
+- 관련 위키: [[entries/2026-09-26-rich-notify-message]] (후속: 메시지 확장·꾸밈)
+- 설계 문서/이슈/PR: PR #8, release v0.3.0
