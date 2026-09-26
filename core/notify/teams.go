@@ -1,46 +1,20 @@
 package notify
 
-import "net/url"
+import (
+	"net/url"
+	"strings"
+)
 
 func init() {
 	Register(Teams{})
 }
 
-// Teams - Microsoft Teams 웹후크 (Workflows / Incoming Webhook 공통 Adaptive Card 형식).
+// Teams - Microsoft Teams 웹후크 (Workflows / Incoming Webhook 공통 Adaptive Card).
+// 프로필 이미지 + 제목 헤더, FactSet(키-값 표), 섹션별 TextBlock, 상태 색상, 링크 버튼으로 표현한다.
 type Teams struct{}
 
-type teamsPayload struct {
-	Type        string            `json:"type"`
-	Attachments []teamsAttachment `json:"attachments"`
-}
-
-type teamsAttachment struct {
-	ContentType string       `json:"contentType"`
-	Content     adaptiveCard `json:"content"`
-}
-
-type adaptiveCard struct {
-	Schema  string           `json:"$schema"`
-	Type    string           `json:"type"`
-	Version string           `json:"version"`
-	Body    []adaptiveText   `json:"body"`
-	Actions []adaptiveAction `json:"actions,omitempty"`
-}
-
-type adaptiveText struct {
-	Type   string `json:"type"`
-	Text   string `json:"text"`
-	Weight string `json:"weight,omitempty"`
-	Size   string `json:"size,omitempty"`
-	Color  string `json:"color,omitempty"`
-	Wrap   bool   `json:"wrap"`
-}
-
-type adaptiveAction struct {
-	Type  string `json:"type"`
-	Title string `json:"title"`
-	URL   string `json:"url"`
-}
+// adaptive - Adaptive Card 요소. 스키마가 깊고 요소 종류가 다양해 map 으로 구성한다.
+type adaptive = map[string]any
 
 func (Teams) Name() string { return "teams" }
 
@@ -48,30 +22,107 @@ func (Teams) Matches(endpoint *url.URL) bool {
 	return hostEndsWith(endpoint, ".logic.azure.com", ".powerplatform.com", ".webhook.office.com")
 }
 
-func (Teams) Format(e Event, _ *url.URL) (any, error) {
-	body := []adaptiveText{{
-		Type: "TextBlock", Text: e.Title(), Weight: "Bolder", Size: "Medium", Color: teamsColor(e.Outcome), Wrap: true,
-	}}
-	for _, line := range e.Lines() {
-		body = append(body, adaptiveText{Type: "TextBlock", Text: line, Wrap: true})
+func (Teams) Format(m Message, _ *url.URL) (any, error) {
+	c := m.Card
+	card := adaptive{
+		"$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+		"type":    "AdaptiveCard",
+		"version": "1.4",
+		"msteams": adaptive{"width": "Full"},
+		"body":    teamsBody(c),
 	}
-	var actions []adaptiveAction
-	if e.RunURL != "" {
-		actions = []adaptiveAction{{Type: "Action.OpenUrl", Title: "View run", URL: e.RunURL}}
+	if actions := teamsActions(c); len(actions) > 0 {
+		card["actions"] = actions
 	}
-	return teamsPayload{
-		Type: "message",
-		Attachments: []teamsAttachment{{
-			ContentType: "application/vnd.microsoft.card.adaptive",
-			Content: adaptiveCard{
-				Schema:  "http://adaptivecards.io/schemas/adaptive-card.json",
-				Type:    "AdaptiveCard",
-				Version: "1.4",
-				Body:    body,
-				Actions: actions,
-			},
+	return adaptive{
+		"type": "message",
+		"attachments": []adaptive{{
+			"contentType": "application/vnd.microsoft.card.adaptive",
+			"content":     card,
 		}},
 	}, nil
+}
+
+func teamsBody(c Card) []adaptive {
+	body := []adaptive{teamsHeader(c)}
+	if len(c.Facts) > 0 {
+		facts := make([]adaptive, 0, len(c.Facts))
+		for _, f := range c.Facts {
+			facts = append(facts, adaptive{"title": f.Icon + " " + f.Label, "value": mdLink(f.Value, f.URL)})
+		}
+		body = append(body, adaptive{"type": "FactSet", "facts": facts, "spacing": "Medium"})
+	}
+	if c.Commit != nil {
+		body = append(body, teamsSection(c.Labels.Commit, textBlock(mdCommit(c.Commit)))...)
+	}
+	if len(c.Phases) > 0 {
+		lines := make([]adaptive, 0, len(c.Phases))
+		for _, p := range c.Phases {
+			lines = append(lines, textBlock(mdPhase(p)))
+		}
+		body = append(body, teamsSection(c.Labels.Phases, lines...)...)
+	}
+	if len(c.Artifacts) > 0 {
+		block := textBlock(strings.Join(c.Artifacts, "\n\n"))
+		block["fontType"] = "Monospace"
+		block["size"] = "Small"
+		body = append(body, teamsSection(c.Labels.Artifacts, block)...)
+	}
+	if len(c.Errors) > 0 {
+		block := textBlock(truncate(strings.Join(c.Errors, "\n\n"), 2000))
+		block["fontType"] = "Monospace"
+		block["color"] = "Attention"
+		body = append(body, teamsSection(c.Labels.Error, block)...)
+	}
+	footer := textBlock(c.Footer)
+	footer["size"] = "Small"
+	footer["isSubtle"] = true
+	footer["separator"] = true
+	footer["spacing"] = "Medium"
+	return append(body, footer)
+}
+
+// teamsHeader - [프로필 이미지] | 제목(상태 색상) + 부제.
+func teamsHeader(c Card) adaptive {
+	titleBlock := textBlock(c.Title)
+	titleBlock["weight"] = "Bolder"
+	titleBlock["size"] = "Medium"
+	titleBlock["color"] = teamsColor(c.Outcome)
+	items := []adaptive{titleBlock}
+	if c.Subtitle != "" {
+		sub := textBlock(c.Subtitle)
+		sub["isSubtle"] = true
+		sub["spacing"] = "None"
+		items = append(items, sub)
+	}
+	columns := []adaptive{}
+	if c.AvatarURL != "" {
+		columns = append(columns, adaptive{
+			"type": "Column", "width": "auto", "verticalContentAlignment": "Center",
+			"items": []adaptive{{"type": "Image", "url": c.AvatarURL, "size": "Small", "style": "Person"}},
+		})
+	}
+	columns = append(columns, adaptive{"type": "Column", "width": "stretch", "verticalContentAlignment": "Center", "items": items})
+	return adaptive{"type": "ColumnSet", "columns": columns}
+}
+
+func teamsSection(label string, blocks ...adaptive) []adaptive {
+	heading := textBlock(label)
+	heading["weight"] = "Bolder"
+	heading["spacing"] = "Medium"
+	return append([]adaptive{heading}, blocks...)
+}
+
+func teamsActions(c Card) []adaptive {
+	actions := make([]adaptive, 0, len(c.Links))
+	for _, l := range c.Links {
+		actions = append(actions, adaptive{"type": "Action.OpenUrl", "title": l.Label, "url": l.URL})
+	}
+	return actions
+}
+
+func textBlock(text string) adaptive {
+	return adaptive{"type": "TextBlock", "text": text, "wrap": true, "spacing": "Small"}
 }
 
 // teamsColor - Adaptive Card 는 임의 색상이 아닌 의미 기반 색상만 지원한다.

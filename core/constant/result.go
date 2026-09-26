@@ -1,12 +1,17 @@
 package constant
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 type PhaseResult struct {
-	Phase  string
-	Status PhaseStatus
-	Cause  error
-	Reason string
+	Phase     string
+	Status    PhaseStatus
+	Cause     error
+	Reason    string
+	Elapsed   time.Duration // phase 실행 소요 시간 (스킵 시 0)
+	Artifacts []string      // phase 가 만들어 낸 결과물 (예: 푸시된 이미지 참조)
 }
 
 type PhaseStatus int

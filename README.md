@@ -18,7 +18,7 @@ Gradle / Node.js 프로젝트의 **Docker 이미지 빌드(GHCR)** 와 **패키�
 - **세밀한 이미지 태깅** — `trigger-type`, `tag`, `branch`, `sha`, `short-sha`, `latest` 의 자유로운 조합.
 - **부분 실행** — `-publish` / `-build` 를 독립적으로 또는 함께 실행.
 - **선택적 설정** — 모든 `.properties` 키는 선택사항이며, 누락 시 안전한 기본값으로 폴백 + 경고 로그.
-- **웹후크 알림** — CI 시작 / 종료(성공·실패, phase 별 결과)를 Discord · Slack · Teams · Google Chat · Telegram 또는 범용 JSON 으로 전송.
+- **웹후크 알림** — CI 시작 / 종료(성공·실패, phase 별 결과·소요 시간, 커밋, 푸시된 이미지)를 Discord · Slack · Teams · Google Chat · Telegram 또는 범용 JSON 으로, 플랫폼별 꾸밈 요소에 맞춰 전송. 영어/한국어 지원.
 
 ---
 
@@ -38,6 +38,7 @@ Gradle / Node.js 프로젝트의 **Docker 이미지 빌드(GHCR)** 와 **패키�
 - [환경 변수 & Secrets](#환경-변수--secrets)
 - [토큰 발급 가이드](#토큰-발급-가이드)
 - [웹후크 알림](#웹후크-알림)
+  - [메시지 구성](#메시지-구성)
   - [지원 플랫폼](#지원-플랫폼)
   - [JSON 페이로드](#json-페이로드)
 - [이미지 태그 합성 규칙](#이미지-태그-합성-규칙)
@@ -303,10 +304,11 @@ publish.command=npm publish --registry=https://npm.pkg.github.com
 | `GPG_TOKEN` | ◻️ | `signed-tag` 트리거 시 GPG 키 저장 리포 clone 용 인증 토큰 |
 | `WEBHOOK_URL` | ◻️ | 알림을 보낼 웹후크 URL. **Secret 으로 등록**. 미설정 시 알림 기능 비활성화. [웹후크 알림](#웹후크-알림) 참고 |
 | `WEBHOOK_TYPE` | ◻️ | 알림 형식 (`discord`, `slack`, `teams`, `googlechat`, `telegram`, `json`). 미설정 시 URL 로 자동 판별 |
+| `WEBHOOK_LANG` | ◻️ | 알림 문구 언어 (`en`, `ko`). 기본값 `en` |
 
 다음 변수들은 GitHub Actions runner 가 자동 주입하므로 별도 설정이 필요 없습니다.
 
-`GITHUB_WORKSPACE`, `GITHUB_REPOSITORY`, `GITHUB_REF_TYPE`, `GITHUB_REF`, `GITHUB_REF_NAME`, `GITHUB_SHA`, `GITHUB_ACTOR`, `GITHUB_SERVER_URL`, `GITHUB_RUN_ID`, `GITHUB_WORKFLOW`
+`GITHUB_WORKSPACE`, `GITHUB_REPOSITORY`, `GITHUB_REF_TYPE`, `GITHUB_REF`, `GITHUB_REF_NAME`, `GITHUB_SHA`, `GITHUB_ACTOR`, `GITHUB_SERVER_URL`, `GITHUB_RUN_ID`, `GITHUB_RUN_NUMBER`, `GITHUB_RUN_ATTEMPT`, `GITHUB_WORKFLOW`, `GITHUB_EVENT_NAME`, `GITHUB_EVENT_PATH`, `RUNNER_OS`, `RUNNER_ARCH`
 
 ---
 
@@ -326,7 +328,7 @@ publish.command=npm publish --registry=https://npm.pkg.github.com
 
 ## 웹후크 알림
 
-CI 가 **시작될 때** 와 **종료될 때** 설정한 웹후크로 알림을 보냅니다. 종료 알림에는 성공/실패 여부, 소요 시간, phase 별 결과(`[publish] succeeded`, `[build] FAILED: ...`) 와 Actions 실행 링크가 포함됩니다.
+CI 가 **시작될 때** 와 **종료될 때** 설정한 웹후크로 알림을 보냅니다.
 
 ```yaml
       - name: Run CI
@@ -334,6 +336,7 @@ CI 가 **시작될 때** 와 **종료될 때** 설정한 웹후크로 알림을 
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           WEBHOOK_URL:  ${{ secrets.WEBHOOK_URL }}   # 웹후크 URL 은 반드시 Secret 으로
           # WEBHOOK_TYPE: slack                      # 선택 — 생략 시 URL 로 자동 판별
+          # WEBHOOK_LANG: ko                         # 선택 — en(기본) | ko
 ```
 
 | 상황 | 동작 |
@@ -341,6 +344,7 @@ CI 가 **시작될 때** 와 **종료될 때** 설정한 웹후크로 알림을 
 | `WEBHOOK_URL` 미설정 | 알림 비활성화 (`notification disabled` 안내 로그) |
 | `WEBHOOK_TYPE` 미설정 | URL 호스트로 플랫폼 자동 판별, 판별 불가 시 `json` |
 | 지원하지 않는 `WEBHOOK_TYPE` / 잘못된 URL | 알림만 비활성화 + 경고 로그 |
+| 지원하지 않는 `WEBHOOK_LANG` | 경고 로그 후 `en` 으로 계속 전송 |
 | 전송 실패 (네트워크 오류, 4xx/5xx) | 경고 로그만 남김 |
 
 - 알림은 **CI 결과(exit code)에 어떠한 영향도 주지 않습니다.** 전송 타임아웃은 10초입니다.
@@ -348,39 +352,90 @@ CI 가 **시작될 때** 와 **종료될 때** 설정한 웹후크로 알림을 
 - 로그에는 웹후크 URL 이 출력되지 않습니다.
 - ⚠️ 바이너리 실행 **이전** 단계(checkout, 바이너리 다운로드 등)의 실패는 알림 대상이 아닙니다.
 
+### 메시지 구성
+
+모든 플랫폼이 **같은 정보**를 담고, 표현만 각 플랫폼의 꾸밈 요소에 맞춥니다.
+
+| 영역 | 내용 | 시작 | 종료 |
+|------|------|:----:|:----:|
+| 제목 | 상태 아이콘(🚀/✅/❌) · 워크플로우명 · 상태 · 저장소 · 실행 번호 · 재시도 횟수 — Actions 실행 링크 | ✅ | ✅ |
+| 실행자 | GitHub 프로필 이미지 + 이름(프로필 링크) | ✅ | ✅ |
+| 📦 저장소 / 🌿 Ref | 저장소·브랜치/태그 (링크) | ✅ | ✅ |
+| 🔖 트리거 / 🛠 환경 | 이벤트 · ref 종류 (`push · tag`) / `gradle` · `node` | ✅ | ✅ |
+| 📋 작업 | 실행 예정 phase (`publish, build`) | ✅ | |
+| ⏱ 소요 시간 | 전체 실행 시간 | | ✅ |
+| 🧩 커밋 | short sha (커밋 링크) + 커밋 메시지 첫 줄 | ✅ | ✅ |
+| 📊 단계 | phase 별 결과 · 소요 시간 · 스킵 사유 | | ✅ |
+| 🐳 이미지 | build 성공 시 푸시된 이미지 참조 | | ✅ |
+| 🔥 오류 | 실패 phase 의 원인, panic 사유 | | 실패 시 |
+| 🔗 링크 / footer | 실행 보기 · 커밋 보기 / `cho-hm/ci <버전> · <runner OS/Arch>` | ✅ | ✅ |
+
+값이 없는 항목(예: `workflow_dispatch` 로 실행되어 커밋 메시지가 없는 경우)은 표시하지 않습니다.
+
+예시 (Discord, `WEBHOOK_LANG=ko`, 종료):
+
+```
+┃ [avatar] cho-hm
+┃ ✅ CI 성공 · owner/repo #42
+┃ 📦 저장소        🌿 Ref          🔖 트리거
+┃ owner/repo      v1.2.0          push · tag
+┃ 🛠 환경          ⏱ 소요 시간
+┃ gradle          3m 12s
+┃ 🧩 커밋
+┃ `a1b2c3d` feat: 결제 모듈 추가
+┃ 📊 단계
+┃ ✅ publish · 성공 · 48s
+┃ ✅ build · 성공 · 2m 21s
+┃ 🐳 이미지
+┃ ghcr.io/owner/repo:v1.2.0
+┃ ghcr.io/owner/repo:latest
+┃ 🔗 실행 보기 · 커밋 보기
+┃ cho-hm/ci v0.4.0 · Linux X64 · 오늘 11:43
+```
+
 ### 지원 플랫폼
 
 | `WEBHOOK_TYPE` | 자동 판별 호스트 | 형식 | 비고 |
 |----------------|------------------|------|------|
-| `discord` | `discord.com/api/webhooks/...` | Embed | 채널 설정 → 연동 → 웹후크 |
-| `slack` | `hooks.slack.com` | Attachment | Slack 호환인 **Mattermost, Rocket.Chat** 은 `WEBHOOK_TYPE=slack` 을 명시 |
-| `teams` | `*.logic.azure.com`, `*.powerplatform.com`, `*.webhook.office.com` | Adaptive Card | Workflows(Power Automate) 웹후크 권장 |
-| `googlechat` | `chat.googleapis.com` | Text | 스페이스 → 앱 및 통합 → 웹후크 |
-| `telegram` | `api.telegram.org` | Text | URL 형태: `https://api.telegram.org/bot<TOKEN>/sendMessage?chat_id=<CHAT_ID>` (`chat_id` 필수) |
+| `discord` | `discord.com/api/webhooks/...` | Embed — author(프로필), 상태 색상 바, inline field, 코드 블록, footer, timestamp | 채널 설정 → 연동 → 웹후크 |
+| `slack` | `hooks.slack.com` | Attachment — 상태 색상 바, author, 2열 field, footer | Slack 호환인 **Mattermost, Rocket.Chat** 도 동일 형식으로 렌더링되며 `WEBHOOK_TYPE=slack` 을 명시 |
+| `teams` | `*.logic.azure.com`, `*.powerplatform.com`, `*.webhook.office.com` | Adaptive Card — 프로필 헤더, FactSet, 상태 색상, 버튼 | Workflows(Power Automate) 웹후크 권장 |
+| `googlechat` | `chat.googleapis.com` | cardsV2 — 프로필 헤더, 라벨 항목, 섹션, 색상 글자, 버튼 | 스페이스 → 앱 및 통합 → 웹후크 |
+| `telegram` | `api.telegram.org` | HTML — 굵은 제목, 링크, 코드/pre 블록 | URL 형태: `https://api.telegram.org/bot<TOKEN>/sendMessage?chat_id=<CHAT_ID>` (`chat_id` 필수) |
 | `json` | (폴백) | 범용 JSON | 전용 형식이 없는 수신측(사내 봇, n8n, Zapier 등)용 |
 
-새 플랫폼은 `core/notify/` 에 `Notifier` 구현체 파일 하나를 추가하고 `init()` 에서 `Register` 하면 됩니다.
+새 플랫폼은 `core/notify/` 에 `Notifier` 구현체 파일 하나를 추가하고 `init()` 에서 `Register` 하면 됩니다. 구현체는 공통 표현 모델(`Card`)을 자기 플랫폼 형식으로 렌더링하는 것만 책임집니다. 새 언어는 `core/notify/i18n.go` 의 `catalog` 에 추가합니다.
 
 ### JSON 페이로드
 
-`json` 형식은 외부 계약이며, 호환되지 않는 변경 시 `version` 이 증가합니다.
+`json` 형식은 외부 계약이며, 호환되지 않는 변경 시 `version` 이 증가합니다. (v2: `refType`, `eventName`, `commitMessage`, `commitUrl`, `runNumber`, `runAttempt`, `env`, `tasks`, `runner`, `ciVersion`, `phases[].elapsedSeconds`, `phases[].artifacts` 추가)
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "event": "finished",
   "status": "failure",
-  "title": "❌ CI failed — owner/repo (CI)",
+  "title": "❌ CI failed · owner/repo #42",
   "workflow": "CI",
   "repository": "owner/repo",
   "ref": "master",
+  "refType": "branch",
+  "eventName": "push",
   "sha": "0123456789abcdef0123456789abcdef01234567",
+  "commitMessage": "fix: login bug",
+  "commitUrl": "https://github.com/owner/repo/commit/0123456789abcdef0123456789abcdef01234567",
   "actor": "someone",
   "runUrl": "https://github.com/owner/repo/actions/runs/1",
+  "runNumber": "42",
+  "runAttempt": "1",
+  "env": "gradle",
+  "tasks": ["publish", "build"],
+  "runner": "Linux X64",
+  "ciVersion": "v0.4.0",
   "elapsedSeconds": 95,
   "phases": [
-    { "phase": "publish", "status": "success" },
-    { "phase": "build", "status": "failure", "detail": "exit status 1" }
+    { "phase": "publish", "status": "success", "elapsedSeconds": 41 },
+    { "phase": "build", "status": "failure", "detail": "exit status 1", "elapsedSeconds": 24 }
   ],
   "timestamp": "2026-01-01T00:00:00Z"
 }
@@ -391,6 +446,8 @@ CI 가 **시작될 때** 와 **종료될 때** 설정한 웹후크로 알림을 
 | `event` | `started` \| `finished` |
 | `status` | `running` \| `success` \| `failure` |
 | `phases[].status` | `success` \| `failure` \| `skipped` |
+| `phases[].artifacts` | phase 결과물 (build 성공 시 푸시된 이미지 참조, 없으면 생략) |
+| `tasks` | 실행 예정 phase (`publish`, `build`) |
 | `error` | panic 등 phase 결과로 표현되지 않는 비정상 종료 사유 (없으면 생략) |
 
 ---
@@ -723,15 +780,17 @@ go vet ./...
 
 ### 크로스 컴파일
 
-릴리즈 바이너리는 다음 6종을 권장합니다.
+릴리즈 바이너리는 다음 6종을 권장합니다. `-X ci/core/constant.Version=<tag>` 로 버전을 주입하면 알림 footer 에 표시됩니다 (미주입 시 `dev`).
 
 ```bash
-GOOS=linux   GOARCH=amd64 go build -o ci-linux-amd64 .
-GOOS=linux   GOARCH=arm64 go build -o ci-linux-arm64 .
-GOOS=darwin  GOARCH=amd64 go build -o ci-darwin-amd64 .
-GOOS=darwin  GOARCH=arm64 go build -o ci-darwin-arm64 .
-GOOS=windows GOARCH=amd64 go build -o ci-windows-amd64.exe .
-GOOS=windows GOARCH=arm64 go build -o ci-windows-arm64.exe .
+VERSION=v0.4.0
+LDFLAGS="-s -w -X ci/core/constant.Version=${VERSION}"
+CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -trimpath -ldflags "$LDFLAGS" -o ci-linux-amd64 .
+CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -trimpath -ldflags "$LDFLAGS" -o ci-linux-arm64 .
+CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -trimpath -ldflags "$LDFLAGS" -o ci-darwin-amd64 .
+CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -trimpath -ldflags "$LDFLAGS" -o ci-darwin-arm64 .
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "$LDFLAGS" -o ci-windows-amd64.exe .
+CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build -trimpath -ldflags "$LDFLAGS" -o ci-windows-arm64.exe .
 ```
 
 GitHub Releases 에 업로드하면 [전체 워크플로우 예시](#전체-워크플로우-예시) 의 다운로드 단계가 OS/Arch 에 맞춰 자동 선택합니다.
@@ -749,7 +808,7 @@ GitHub Releases 에 업로드하면 [전체 워크플로우 예시](#전체-워�
 │   ├── check/                 # 트리거 검증 + GPG 서명 검증
 │   ├── builds/                # Docker 빌드 체인 (build → login → buildx → logout)
 │   ├── publish/               # Maven/npm publish
-│   ├── notify/                # 웹후크 알림 (플랫폼별 Notifier + Sender)
+│   ├── notify/                # 웹후크 알림 (Event → Card → 플랫폼별 Notifier, Sender, i18n)
 │   ├── env/                   # gradle/node 환경별 기본값/체인
 │   └── constant/              # 전역 상수, phase 결과 모델
 └── util/

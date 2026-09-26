@@ -22,8 +22,15 @@ type TaskContexts struct {
 	GithubServerUrl  string
 	GithubRunId      string
 	GithubWorkflow   string
+	GithubEventName  string
+	GithubEventPath  string
+	GithubRunNumber  string
+	GithubRunAttempt string
+	RunnerOs         string
+	RunnerArch       string
 	WebhookUrl       Secret
 	WebhookType      string
+	WebhookLang      string
 	BuildContexts    *DefaultContextProvider[*BuildContexts]
 	PublishContexts  *DefaultContextProvider[*PublishContexts]
 	TaskFlag         arg.Flags
@@ -47,8 +54,15 @@ func (t *TaskContexts) init() {
 	t.GithubServerUrl = getEnv("GITHUB_SERVER_URL")
 	t.GithubRunId = getEnv("GITHUB_RUN_ID")
 	t.GithubWorkflow = getEnv("GITHUB_WORKFLOW")
+	t.GithubEventName = getEnv("GITHUB_EVENT_NAME")
+	t.GithubEventPath = getEnv("GITHUB_EVENT_PATH")
+	t.GithubRunNumber = getEnv("GITHUB_RUN_NUMBER")
+	t.GithubRunAttempt = getEnv("GITHUB_RUN_ATTEMPT")
+	t.RunnerOs = getEnv("RUNNER_OS")
+	t.RunnerArch = getEnv("RUNNER_ARCH")
 	t.WebhookUrl = Secret{getSecret("WEBHOOK_URL")}
 	t.WebhookType = getEnv("WEBHOOK_TYPE")
+	t.WebhookLang = getEnv("WEBHOOK_LANG")
 	t.BuildContexts = &DefaultContextProvider[*BuildContexts]{
 		newInstanceFunc: func() *BuildContexts { return new(BuildContexts) },
 	}

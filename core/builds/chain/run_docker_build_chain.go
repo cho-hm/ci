@@ -3,8 +3,6 @@ package chain
 import (
 	"ci/core/parse"
 	"ci/util/cli"
-	"fmt"
-	"strings"
 )
 
 type RunDockerBuildChain struct {
@@ -14,8 +12,6 @@ type RunDockerBuildChain struct {
 func (b RunDockerBuildChain) DoChain(context *parse.TaskContexts) error {
 	buildCtx := context.BuildContexts.Get()
 	dockerfilePath := buildCtx.DockerFile
-	baseImage := strings.ToLower(context.GithubRepository)
-	ghcrBase := fmt.Sprintf("ghcr.io/%s", baseImage)
 
 	args := []string{
 		"buildx", "build",
@@ -25,8 +21,8 @@ func (b RunDockerBuildChain) DoChain(context *parse.TaskContexts) error {
 		"--push",
 	}
 
-	for _, s := range buildCtx.ImageNameSuffix.ToSlice(context.GithubRefName, buildCtx.TriggerType, context.GithubSha) {
-		args = append(args, "-t", fmt.Sprintf("%s:%s", ghcrBase, s))
+	for _, ref := range context.ImageRefs() {
+		args = append(args, "-t", ref)
 	}
 
 	args = append(args, context.Workspace)
